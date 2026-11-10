@@ -132,7 +132,7 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     setTimeout(() => {
       setActiveStep(2);
       if (drillEngine === 'postgres') {
-        addLog(`Probing container readiness via [pg_isready -U postgres -d testdb]...`, 'info');
+        addLog(`Probing container readiness via [pg_isready -h 127.0.0.1 -U postgres -d testdb]...`, 'info');
       } else {
         addLog(`Probing MongoDB readiness via [mongosh adminCommand("ping")]...`, 'info');
       }
