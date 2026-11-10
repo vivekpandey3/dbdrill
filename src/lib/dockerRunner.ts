@@ -180,15 +180,23 @@ export async function runDbDrill(
       container = await docker.createContainer({
         Image: 'postgres:16-alpine',
         name: `dbdrill-pg-${drillId}`,
-        Env: ['POSTGRES_PASSWORD=drillpass', 'POSTGRES_DB=testdb'],
+        Env: ['POSTGRES_PASSWORD=drillpass', 'POSTGRES_DB=testdb', 'PGPASSWORD=drillpass'],
       });
       await container.start();
 
-      // 2. Readiness check: wait for pg_isready
+      // 2. Readiness check: wait for pg_isready on TCP 127.0.0.1:5432
       let isReady = false;
       const readyDeadline = Date.now() + 25000;
       while (Date.now() < readyDeadline) {
-        const check = await execInContainer(container, ['pg_isready', '-U', 'postgres', '-d', 'testdb']);
+        const check = await execInContainer(container, [
+          'pg_isready',
+          '-h',
+          '127.0.0.1',
+          '-U',
+          'postgres',
+          '-d',
+          'testdb',
+        ]);
         if (check.exitCode === 0) {
           isReady = true;
           break;
@@ -206,6 +214,8 @@ export async function runDbDrill(
 
       const restoreExec = await execInContainer(container, [
         'psql',
+        '-h',
+        '127.0.0.1',
         '-U',
         'postgres',
         '-d',
@@ -231,6 +241,8 @@ export async function runDbDrill(
       // 4. Verification query: Count tables from information_schema.tables WHERE table_schema = 'public'
       const verifyExec = await execInContainer(container, [
         'psql',
+        '-h',
+        '127.0.0.1',
         '-U',
         'postgres',
         '-d',
