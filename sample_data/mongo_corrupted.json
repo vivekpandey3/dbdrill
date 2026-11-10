@@ -1,0 +1,6 @@
+[
+  { "orderId": "ORD101", "customer": "Aman", "amount": 1200, "status": "COMPLETED" },
+  { "orderId": "ORD102", "customer": "Rohan", "amount": 450, "status": 
+  { "orderId": "ORD103", "customer": unquoted_name, "amount": 3200,
+  CORRUPTED_MONGO_DUMP_STREAM_BROKEN_0xFF
+

@@ -1,0 +1,8 @@
+[
+  { "orderId": "ORD101", "customer": "Aman", "amount": 1200, "status": "COMPLETED" },
+  { "orderId": "ORD102", "customer": "Rohan", "amount": 450, "status": "PENDING" },
+  { "orderId": "ORD103", "customer": "Priya", "amount": 3200, "status": "COMPLETED" },
+  { "orderId": "ORD104", "customer": "Kavita", "amount": 890, "status": "COMPLETED" },
+  { "orderId": "ORD105", "customer": "Vikram", "amount": 1500, "status": "CANCELLED" }
+]
+
