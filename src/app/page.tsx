@@ -17,6 +17,10 @@ import {
   ShieldAlert,
   Server,
   Zap,
+  UploadCloud,
+  FileUp,
+  FileText,
+  Trash2,
 } from 'lucide-react';
 
 type Engine = 'postgres' | 'mongodb';
@@ -38,14 +42,29 @@ interface StepLog {
   level: 'info' | 'success' | 'error' | 'warn';
 }
 
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
 export default function DBDrillDashboard() {
   const [engine, setEngine] = useState<Engine>('postgres');
   const [customContent, setCustomContent] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [inputMode, setInputMode] = useState<'upload' | 'editor'>('upload');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [result, setResult] = useState<DrillResult | null>(null);
   const [logs, setLogs] = useState<StepLog[]>([]);
   const [activeStep, setActiveStep] = useState<number>(0);
   const terminalBottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isPg = engine === 'postgres';
 
   // Default placeholders & sample loaders
   const pgSampleHealthy = `-- Healthy PostgreSQL Backup Dump
@@ -93,6 +112,17 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     }
   }, [engine]);
 
+  // When switching engine, reset selected file if extension doesn't match
+  useEffect(() => {
+    if (selectedFile) {
+      const isSql = selectedFile.name.toLowerCase().endsWith('.sql');
+      const isJson = selectedFile.name.toLowerCase().endsWith('.json');
+      if ((engine === 'postgres' && !isSql) || (engine === 'mongodb' && !isJson)) {
+        setSelectedFile(null);
+      }
+    }
+  }, [engine, selectedFile]);
+
   // Auto-scroll terminal
   useEffect(() => {
     terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,11 +141,65 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     ]);
   };
 
+  const handleFileChange = (file: File) => {
+    const isSql = file.name.toLowerCase().endsWith('.sql');
+    const isJson = file.name.toLowerCase().endsWith('.json');
+    if (isPg && !isSql) {
+      addLog(`File warning: "${file.name}" may not be a .sql dump for PostgreSQL.`, 'warn');
+    } else if (!isPg && !isJson) {
+      addLog(`File warning: "${file.name}" may not be a .json dump for MongoDB.`, 'warn');
+    }
+
+    setSelectedFile(file);
+    addLog(`Staged backup file: ${file.name} (${formatBytes(file.size)})`, 'info');
+
+    // Read file in browser via FileReader
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = (e.target?.result as string) || '';
+      setCustomContent(text);
+    };
+    reader.onerror = () => {
+      addLog(`Failed reading file "${file.name}"`, 'error');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
   const executeDrill = async (
     drillEngine: Engine,
     type: 'demo' | 'custom',
     sample?: 'healthy' | 'corrupted',
-    contentToRun?: string
+    contentToRun?: string,
+    fileToUpload?: File | null
   ) => {
     setIsRunning(true);
     setResult(null);
@@ -126,6 +210,9 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     const containerImage = drillEngine === 'postgres' ? 'postgres:16-alpine' : 'mongo:7.0';
 
     addLog(`Initiating disaster recovery drill for ${engineName}...`, 'info');
+    if (fileToUpload) {
+      addLog(`Selected dump file: ${fileToUpload.name} (${formatBytes(fileToUpload.size)})`, 'info');
+    }
     addLog(`Creating isolated ephemeral container [${containerImage}]...`, 'info');
 
     // Simulate animated step transitions for live feel
@@ -148,16 +235,31 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     }, 700);
 
     try {
-      const payload =
-        type === 'demo'
-          ? { engine: drillEngine, type: 'demo', sample }
-          : { engine: drillEngine, type: 'custom', content: contentToRun || customContent };
+      let response: Response;
 
-      const response = await fetch('/api/drill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      if (type === 'custom' && fileToUpload) {
+        addLog(`Streaming multipart/form-data payload into API...`, 'info');
+        const formData = new FormData();
+        formData.append('engine', drillEngine);
+        formData.append('type', 'custom');
+        formData.append('file', fileToUpload);
+
+        response = await fetch('/api/drill', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        const payload =
+          type === 'demo'
+            ? { engine: drillEngine, type: 'demo', sample }
+            : { engine: drillEngine, type: 'custom', content: contentToRun || customContent };
+
+        response = await fetch('/api/drill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
 
       const data: DrillResult = await response.json();
 
@@ -197,8 +299,6 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
       setActiveStep(6);
     }
   };
-
-  const isPg = engine === 'postgres';
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100">
@@ -352,64 +452,252 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                     {isPg ? 'SQL Dump Drill' : 'Mongo JSON/BSON Drill'}
                   </h3>
                 </div>
-                <div className="flex items-center space-x-2">
+
+                {/* Mode toggle between File Upload and Raw Editor */}
+                <div className="flex items-center p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px]">
                   <button
                     type="button"
-                    onClick={() =>
-                      setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy)
-                    }
-                    className="text-[11px] text-zinc-400 hover:text-zinc-200 underline"
+                    onClick={() => setInputMode('upload')}
+                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
+                      inputMode === 'upload'
+                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
                   >
-                    Reset Sample
+                    <UploadCloud className="h-3.5 w-3.5" />
+                    <span>Upload File</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCustomContent('')}
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                    onClick={() => setInputMode('editor')}
+                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
+                      inputMode === 'editor'
+                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
                   >
-                    Clear
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Raw Editor</span>
                   </button>
                 </div>
               </div>
 
-              <div className="relative">
-                <textarea
-                  rows={10}
-                  value={customContent}
-                  onChange={(e) => setCustomContent(e.target.value)}
-                  placeholder={
-                    isPg
-                      ? 'Paste CREATE TABLE / INSERT SQL dump here...'
-                      : 'Paste JSON array documents here (e.g. [{"orderId":"ORD101", ...}])...'
-                  }
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 transition"
-                  spellCheck={false}
-                />
-              </div>
+              {inputMode === 'upload' ? (
+                /* Sleek Drag and Drop Zone */
+                <div className="space-y-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={isPg ? '.sql' : '.json'}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleFileChange(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
 
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-zinc-500 font-mono">
-                  {customContent.length} bytes
-                </span>
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`relative cursor-pointer rounded-xl border-2 border-dashed p-6 transition-all duration-200 text-center flex flex-col items-center justify-center group ${
+                      isDragging
+                        ? isPg
+                          ? 'border-blue-400 bg-blue-500/10 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30'
+                          : 'border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30'
+                        : selectedFile
+                        ? 'border-zinc-700 bg-zinc-950/70 hover:border-zinc-600'
+                        : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900/40'
+                    }`}
+                  >
+                    <div
+                      className={`h-12 w-12 rounded-xl flex items-center justify-center mb-3 transition-transform duration-200 group-hover:scale-110 ${
+                        isDragging
+                          ? isPg
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-emerald-500/20 text-emerald-400'
+                          : selectedFile
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-zinc-800/80 text-zinc-400 group-hover:text-zinc-200'
+                      }`}
+                    >
+                      {selectedFile ? (
+                        <FileCode className="h-6 w-6" />
+                      ) : (
+                        <UploadCloud className="h-6 w-6" />
+                      )}
+                    </div>
 
-                <button
-                  disabled={isRunning || !customContent.trim()}
-                  onClick={() => executeDrill(engine, 'custom', undefined, customContent)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                >
-                  {isRunning ? (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
-                      <span>Running Sandbox Drill...</span>
-                    </>
+                    {selectedFile ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-center space-x-2">
+                          <span className="font-semibold text-sm text-zinc-100 font-mono break-all">
+                            {selectedFile.name}
+                          </span>
+                          <span className="text-xs text-zinc-400 font-mono">
+                            ({formatBytes(selectedFile.size)})
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-400 font-medium">
+                          ✓ File staged &amp; ready for disaster recovery drill
+                        </p>
+                        <p className="text-[11px] text-zinc-500 pt-1">
+                          Click or drag another file to replace
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-zinc-200">
+                          <span className="text-blue-400 font-semibold group-hover:underline">
+                            Click to browse
+                          </span>{' '}
+                          or drag &amp; drop database dump
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          Accepts{' '}
+                          <code className="text-zinc-300 font-mono bg-zinc-800/80 px-1.5 py-0.5 rounded">
+                            {isPg ? '.sql' : '.json'}
+                          </code>{' '}
+                          files for {isPg ? 'PostgreSQL' : 'MongoDB'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Staged file action bar */}
+                  {selectedFile ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+                      <div className="flex items-center space-x-3 truncate">
+                        <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 flex-shrink-0">
+                          <FileCode className="h-4 w-4 text-emerald-400" />
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-mono font-medium text-zinc-200 truncate">
+                            {selectedFile.name}
+                          </p>
+                          <p className="text-[11px] text-zinc-500 font-mono">
+                            {formatBytes(selectedFile.size)} &bull; {isPg ? 'PostgreSQL Dump' : 'MongoDB JSON'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy);
+                          }}
+                          className="p-2 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition"
+                          title="Remove file"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          disabled={isRunning}
+                          onClick={() => executeDrill(engine, 'custom', undefined, customContent, selectedFile)}
+                          className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold text-xs transition shadow-md ${
+                            isPg
+                              ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {isRunning ? (
+                            <>
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              <span>Restoring...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-3.5 w-3.5 fill-current" />
+                              <span>Upload &amp; Run Disaster Drill</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      <span>Run Live Drill</span>
-                    </>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-zinc-500 font-mono">
+                        No file staged yet
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition"
+                      >
+                        <FileUp className="h-3.5 w-3.5" />
+                        <span>Select File</span>
+                      </button>
+                    </div>
                   )}
-                </button>
-              </div>
+                </div>
+              ) : (
+                /* Raw Editor Mode */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-end space-x-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy)
+                      }
+                      className="text-zinc-400 hover:text-zinc-200 underline"
+                    >
+                      Reset Sample
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomContent('')}
+                      className="text-zinc-500 hover:text-zinc-300"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      rows={10}
+                      value={customContent}
+                      onChange={(e) => setCustomContent(e.target.value)}
+                      placeholder={
+                        isPg
+                          ? 'Paste CREATE TABLE / INSERT SQL dump here...'
+                          : 'Paste JSON array documents here (e.g. [{"orderId":"ORD101", ...}])...'
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 transition"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-zinc-500 font-mono">
+                      {customContent.length} bytes
+                    </span>
+
+                    <button
+                      disabled={isRunning || !customContent.trim()}
+                      onClick={() => executeDrill(engine, 'custom', undefined, customContent)}
+                      className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                    >
+                      {isRunning ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
+                          <span>Running Sandbox Drill...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          <span>Run Live Drill</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

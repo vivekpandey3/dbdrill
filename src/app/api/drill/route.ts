@@ -26,8 +26,35 @@ function getSampleContent(engine: 'postgres' | 'mongodb', sample: 'healthy' | 'c
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { engine, type, sample, content: customContent } = body;
+    const contentType = req.headers.get('content-type') || '';
+
+    let engine: 'postgres' | 'mongodb';
+    let type: 'demo' | 'custom';
+    let sample: 'healthy' | 'corrupted' | undefined;
+    let payload = '';
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      engine = (formData.get('engine') as 'postgres' | 'mongodb') || 'postgres';
+      type = (formData.get('type') as 'demo' | 'custom') || 'custom';
+      sample = (formData.get('sample') as 'healthy' | 'corrupted') || undefined;
+
+      const file = formData.get('file');
+      if (file && typeof file === 'object' && 'text' in file) {
+        payload = await (file as File).text();
+      } else {
+        const customContent = formData.get('content');
+        if (typeof customContent === 'string') {
+          payload = customContent;
+        }
+      }
+    } else {
+      const body = await req.json();
+      engine = body.engine;
+      type = body.type;
+      sample = body.sample;
+      payload = body.content || '';
+    }
 
     if (engine !== 'postgres' && engine !== 'mongodb') {
       return NextResponse.json(
@@ -35,8 +62,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    let payload = '';
 
     if (type === 'demo') {
       if (sample !== 'healthy' && sample !== 'corrupted') {
@@ -47,13 +72,12 @@ export async function POST(req: NextRequest) {
       }
       payload = getSampleContent(engine, sample);
     } else if (type === 'custom') {
-      if (typeof customContent !== 'string') {
+      if (!payload || typeof payload !== 'string' || !payload.trim()) {
         return NextResponse.json(
-          { error: 'Custom drill content must be provided as a string.' },
+          { error: 'Custom drill content or dump file must be provided.' },
           { status: 400 }
         );
       }
-      payload = customContent;
     } else {
       return NextResponse.json(
         { error: 'Invalid drill type. Must be "demo" or "custom".' },
