@@ -21,6 +21,7 @@ import {
   FileUp,
   FileText,
   Trash2,
+  X,
 } from 'lucide-react';
 
 type Engine = 'postgres' | 'mongodb';
@@ -398,157 +399,234 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Demo & Custom Controls (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Demo Card */}
-            <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <Database className="h-4 w-4 text-emerald-400" />
-                  <h3 className="font-semibold text-sm text-zinc-200 uppercase tracking-wider">
-                    Quick Scenario Presets
-                  </h3>
-                </div>
-                <span className="text-xs text-zinc-500 font-mono">sample_data/</span>
-              </div>
-
-              <p className="text-xs text-zinc-400">
-                Trigger an automated disaster recovery simulation with standard healthy or corrupted dump files.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <button
-                  disabled={isRunning}
-                  onClick={() => {
-                    const sampleText = isPg ? pgSampleHealthy : mongoSampleHealthy;
-                    setCustomContent(sampleText);
-                    executeDrill(engine, 'demo', 'healthy');
-                  }}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-emerald-500/5"
-                >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition" />
-                  <span>Run Healthy Drill (Pass)</span>
-                </button>
-
-                <button
-                  disabled={isRunning}
-                  onClick={() => {
-                    const sampleText = isPg ? pgSampleCorrupted : mongoSampleCorrupted;
-                    setCustomContent(sampleText);
-                    executeDrill(engine, 'demo', 'corrupted');
-                  }}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-rose-500/5"
-                >
-                  <AlertTriangle className="h-4 w-4 text-rose-400 group-hover:scale-110 transition" />
-                  <span>Run Corrupted Drill (Fail)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Dump Drill Card */}
-            <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FileCode className="h-4 w-4 text-blue-400" />
-                  <h3 className="font-semibold text-sm text-zinc-200">
-                    {isPg ? 'SQL Dump Drill' : 'Mongo JSON/BSON Drill'}
-                  </h3>
+            {/* Quick Scenario Presets (Hidden when a custom file is uploaded) */}
+            {!selectedFile && (
+              <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-5 space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <Database className="h-4 w-4 text-emerald-400" />
+                    <h3 className="font-semibold text-sm text-zinc-200 uppercase tracking-wider">
+                      Quick Scenario Presets
+                    </h3>
+                  </div>
+                  <span className="text-xs text-zinc-500 font-mono">sample_data/</span>
                 </div>
 
-                {/* Mode toggle between File Upload and Raw Editor */}
-                <div className="flex items-center p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px]">
+                <p className="text-xs text-zinc-400">
+                  Trigger an automated disaster recovery simulation with standard healthy or corrupted dump files.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
-                    type="button"
-                    onClick={() => setInputMode('upload')}
-                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
-                      inputMode === 'upload'
-                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    <UploadCloud className="h-3.5 w-3.5" />
-                    <span>Upload File</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputMode('editor')}
-                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
-                      inputMode === 'editor'
-                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>Raw Editor</span>
-                  </button>
-                </div>
-              </div>
-
-              {inputMode === 'upload' ? (
-                /* Sleek Drag and Drop Zone */
-                <div className="space-y-4">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={isPg ? '.sql' : '.json'}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleFileChange(e.target.files[0]);
-                      }
+                    disabled={isRunning}
+                    onClick={() => {
+                      const sampleText = isPg ? pgSampleHealthy : mongoSampleHealthy;
+                      setCustomContent(sampleText);
+                      executeDrill(engine, 'demo', 'healthy');
                     }}
-                    className="hidden"
-                  />
-
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragEnter={handleDragEnter}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`relative cursor-pointer rounded-xl border-2 border-dashed p-6 transition-all duration-200 text-center flex flex-col items-center justify-center group ${
-                      isDragging
-                        ? isPg
-                          ? 'border-blue-400 bg-blue-500/10 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30'
-                          : 'border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30'
-                        : selectedFile
-                        ? 'border-zinc-700 bg-zinc-950/70 hover:border-zinc-600'
-                        : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900/40'
-                    }`}
+                    className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-emerald-500/5"
                   >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition" />
+                    <span>Run Healthy Drill (Pass)</span>
+                  </button>
+
+                  <button
+                    disabled={isRunning}
+                    onClick={() => {
+                      const sampleText = isPg ? pgSampleCorrupted : mongoSampleCorrupted;
+                      setCustomContent(sampleText);
+                      executeDrill(engine, 'demo', 'corrupted');
+                    }}
+                    className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-rose-500/5"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-rose-400 group-hover:scale-110 transition" />
+                    <span>Run Corrupted Drill (Fail)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden native file input accessible across modes */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={isPg ? '.sql' : '.json'}
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleFileChange(e.target.files[0]);
+                }
+              }}
+              className="hidden"
+            />
+
+            {/* Custom Dump Section: Shows ONLY uploaded file card if selectedFile exists */}
+            {selectedFile ? (
+              /* Dedicated Uploaded File Card */
+              <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-6 space-y-5 shadow-xl animate-in fade-in">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+                  <div className="flex items-center space-x-2.5">
                     <div
-                      className={`h-12 w-12 rounded-xl flex items-center justify-center mb-3 transition-transform duration-200 group-hover:scale-110 ${
-                        isDragging
-                          ? isPg
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : 'bg-emerald-500/20 text-emerald-400'
-                          : selectedFile
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-zinc-800/80 text-zinc-400 group-hover:text-zinc-200'
+                      className={`p-2 rounded-lg ${
+                        isPg
+                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                       }`}
                     >
-                      {selectedFile ? (
-                        <FileCode className="h-6 w-6" />
-                      ) : (
-                        <UploadCloud className="h-6 w-6" />
-                      )}
+                      <FileCode className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm text-zinc-100">
+                        Custom Dump File Staged
+                      </h3>
+                      <p className="text-xs text-zinc-400">
+                        Configured for ephemeral {isPg ? 'PostgreSQL 16' : 'MongoDB 7.0'} container restoration
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-300 border border-zinc-700/60 hover:border-rose-800/50 text-xs font-medium transition"
+                    title="Remove File and restore presets"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    <span>Remove File</span>
+                  </button>
+                </div>
+
+                {/* File Details Box */}
+                <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800/80 space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-sm font-semibold text-zinc-100 truncate">
+                          {selectedFile.name}
+                        </span>
+                        <span className="text-xs font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 flex-shrink-0">
+                          {formatBytes(selectedFile.size)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Target Engine:{' '}
+                        <span className="font-mono text-zinc-300">
+                          {isPg ? 'PostgreSQL (psql restore)' : 'MongoDB (mongoimport)'}
+                        </span>
+                      </p>
                     </div>
 
-                    {selectedFile ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-center space-x-2">
-                          <span className="font-semibold text-sm text-zinc-100 font-mono break-all">
-                            {selectedFile.name}
-                          </span>
-                          <span className="text-xs text-zinc-400 font-mono">
-                            ({formatBytes(selectedFile.size)})
-                          </span>
-                        </div>
-                        <p className="text-xs text-emerald-400 font-medium">
-                          ✓ File staged &amp; ready for disaster recovery drill
-                        </p>
-                        <p className="text-[11px] text-zinc-500 pt-1">
-                          Click or drag another file to replace
-                        </p>
+                    <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-medium flex-shrink-0">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Ready for Ingestion</span>
+                    </div>
+                  </div>
+
+                  {customContent && (
+                    <div className="text-[11px] text-zinc-400 flex items-center space-x-2 pt-2 border-t border-zinc-900">
+                      <span className="text-zinc-500 font-mono">Payload Preview:</span>
+                      <span className="font-mono text-zinc-300 truncate">
+                        {customContent.slice(0, 90).replace(/\n/g, ' ')}...
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Single Prominent Action Button: "Run Drill on Uploaded File" */}
+                <button
+                  disabled={isRunning}
+                  onClick={() => executeDrill(engine, 'custom', undefined, customContent, selectedFile)}
+                  className={`w-full flex items-center justify-center space-x-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm transition shadow-lg ${
+                    isPg
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25 hover:shadow-blue-600/35'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 hover:shadow-emerald-600/35'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {isRunning ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Restoring Dump in Sandbox Container...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 fill-current" />
+                      <span>Run Drill on Uploaded File</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              /* Custom Dump Drill Card (Dropzone & Raw Editor when no file is selected) */
+              <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FileCode className="h-4 w-4 text-blue-400" />
+                    <h3 className="font-semibold text-sm text-zinc-200">
+                      {isPg ? 'SQL Dump Drill' : 'Mongo JSON/BSON Drill'}
+                    </h3>
+                  </div>
+
+                  {/* Mode toggle between File Upload and Raw Editor */}
+                  <div className="flex items-center p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setInputMode('upload')}
+                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
+                        inputMode === 'upload'
+                          ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <UploadCloud className="h-3.5 w-3.5" />
+                      <span>Upload File</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputMode('editor')}
+                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-md transition ${
+                        inputMode === 'editor'
+                          ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>Raw Editor</span>
+                    </button>
+                  </div>
+                </div>
+
+                {inputMode === 'upload' ? (
+                  /* Sleek Drag and Drop Zone */
+                  <div className="space-y-4">
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`relative cursor-pointer rounded-xl border-2 border-dashed p-6 transition-all duration-200 text-center flex flex-col items-center justify-center group ${
+                        isDragging
+                          ? isPg
+                            ? 'border-blue-400 bg-blue-500/10 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30'
+                            : 'border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30'
+                          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900/40'
+                      }`}
+                    >
+                      <div
+                        className={`h-12 w-12 rounded-xl flex items-center justify-center mb-3 transition-transform duration-200 group-hover:scale-110 ${
+                          isDragging
+                            ? isPg
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-zinc-800/80 text-zinc-400 group-hover:text-zinc-200'
+                        }`}
+                      >
+                        <UploadCloud className="h-6 w-6" />
                       </div>
-                    ) : (
+
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-zinc-200">
                           <span className="text-blue-400 font-semibold group-hover:underline">
@@ -564,63 +642,8 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                           files for {isPg ? 'PostgreSQL' : 'MongoDB'}
                         </p>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Staged file action bar */}
-                  {selectedFile ? (
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800">
-                      <div className="flex items-center space-x-3 truncate">
-                        <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 flex-shrink-0">
-                          <FileCode className="h-4 w-4 text-emerald-400" />
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs font-mono font-medium text-zinc-200 truncate">
-                            {selectedFile.name}
-                          </p>
-                          <p className="text-[11px] text-zinc-500 font-mono">
-                            {formatBytes(selectedFile.size)} &bull; {isPg ? 'PostgreSQL Dump' : 'MongoDB JSON'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedFile(null);
-                            setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy);
-                          }}
-                          className="p-2 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition"
-                          title="Remove file"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          disabled={isRunning}
-                          onClick={() => executeDrill(engine, 'custom', undefined, customContent, selectedFile)}
-                          className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold text-xs transition shadow-md ${
-                            isPg
-                              ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {isRunning ? (
-                            <>
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              <span>Restoring...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-3.5 w-3.5 fill-current" />
-                              <span>Upload &amp; Run Disaster Drill</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
-                  ) : (
+
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[11px] text-zinc-500 font-mono">
                         No file staged yet
@@ -634,71 +657,71 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                         <span>Select File</span>
                       </button>
                     </div>
-                  )}
-                </div>
-              ) : (
-                /* Raw Editor Mode */
-                <div className="space-y-3">
-                  <div className="flex items-center justify-end space-x-2 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy)
-                      }
-                      className="text-zinc-400 hover:text-zinc-200 underline"
-                    >
-                      Reset Sample
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomContent('')}
-                      className="text-zinc-500 hover:text-zinc-300"
-                    >
-                      Clear
-                    </button>
                   </div>
+                ) : (
+                  /* Raw Editor Mode */
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-end space-x-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy)
+                        }
+                        className="text-zinc-400 hover:text-zinc-200 underline"
+                      >
+                        Reset Sample
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomContent('')}
+                        className="text-zinc-500 hover:text-zinc-300"
+                      >
+                        Clear
+                      </button>
+                    </div>
 
-                  <div className="relative">
-                    <textarea
-                      rows={10}
-                      value={customContent}
-                      onChange={(e) => setCustomContent(e.target.value)}
-                      placeholder={
-                        isPg
-                          ? 'Paste CREATE TABLE / INSERT SQL dump here...'
-                          : 'Paste JSON array documents here (e.g. [{"orderId":"ORD101", ...}])...'
-                      }
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 transition"
-                      spellCheck={false}
-                    />
+                    <div className="relative">
+                      <textarea
+                        rows={10}
+                        value={customContent}
+                        onChange={(e) => setCustomContent(e.target.value)}
+                        placeholder={
+                          isPg
+                            ? 'Paste CREATE TABLE / INSERT SQL dump here...'
+                            : 'Paste JSON array documents here (e.g. [{"orderId":"ORD101", ...}])...'
+                        }
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 transition"
+                        spellCheck={false}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-zinc-500 font-mono">
+                        {customContent.length} bytes
+                      </span>
+
+                      <button
+                        disabled={isRunning || !customContent.trim()}
+                        onClick={() => executeDrill(engine, 'custom', undefined, customContent)}
+                        className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                      >
+                        {isRunning ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
+                            <span>Running Sandbox Drill...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-3.5 w-3.5 fill-current" />
+                            <span>Run Live Drill</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-zinc-500 font-mono">
-                      {customContent.length} bytes
-                    </span>
-
-                    <button
-                      disabled={isRunning || !customContent.trim()}
-                      onClick={() => executeDrill(engine, 'custom', undefined, customContent)}
-                      className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                    >
-                      {isRunning ? (
-                        <>
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
-                          <span>Running Sandbox Drill...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                          <span>Run Live Drill</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right Column: Terminal Simulator & Step Progress (5 cols) */}
