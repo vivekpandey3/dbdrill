@@ -38,9 +38,12 @@ DBDrill provides isolated, ephemeral Docker container sandboxes to simulate and 
 ## 🚀 Key Features
 
 1. **Multi-Engine Disaster Recovery**:
-   - **PostgreSQL 16**: Validates SQL syntax, foreign key constraints, table creation, and records restored.
+   - **PostgreSQL 16**: Validates SQL syntax, foreign key constraints, table creation, and records restored (via TCP loopback probe & restore).
    - **MongoDB 7.0**: Validates JSON/BSON structures, mongoimport ingestion, and document counts.
-2. **Sibling Docker Sandboxing**:
+2. **Drag-and-Drop Dump Ingestion**:
+   - Interactive drop zone supporting `.sql` dumps for PostgreSQL and `.json` dumps for MongoDB.
+   - Dual-mode support: Stream large files via `multipart/form-data` or inspect/edit in the raw Monaco-style editor.
+3. **Sibling Docker Sandboxing**:
    - Spawns isolated, ephemeral containers per drill.
    - Forcefully purges containers in a `finally` block to prevent resource leaks.
    - Cross-platform socket handling (`//./pipe/docker_engine` on Windows, `/var/run/docker.sock` on Linux/macOS).
