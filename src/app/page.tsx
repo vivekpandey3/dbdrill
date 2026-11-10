@@ -56,6 +56,7 @@ export default function DBDrillDashboard() {
   const [engine, setEngine] = useState<Engine>('postgres');
   const [customContent, setCustomContent] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFileContent, setUploadedFileContent] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [inputMode, setInputMode] = useState<'upload' | 'editor'>('upload');
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -120,6 +121,8 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
       const isJson = selectedFile.name.toLowerCase().endsWith('.json');
       if ((engine === 'postgres' && !isSql) || (engine === 'mongodb' && !isJson)) {
         setSelectedFile(null);
+        setUploadedFileContent('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     }
   }, [engine, selectedFile]);
@@ -152,13 +155,16 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     }
 
     setSelectedFile(file);
+    setUploadedFileContent('');
     addLog(`Staged backup file: ${file.name} (${formatBytes(file.size)})`, 'info');
 
     // Read file in browser via FileReader
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = (e.target?.result as string) || '';
+      setUploadedFileContent(text);
       setCustomContent(text);
+      addLog(`Loaded content from ${file.name} (${text.length} characters). Ready to execute.`, 'info');
     };
     reader.onerror = () => {
       addLog(`Failed reading file "${file.name}"`, 'error');
@@ -200,7 +206,7 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     type: 'demo' | 'custom',
     sample?: 'healthy' | 'corrupted',
     contentToRun?: string,
-    fileToUpload?: File | null
+    fileLabel?: string
   ) => {
     setIsRunning(true);
     setResult(null);
@@ -211,8 +217,10 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     const containerImage = drillEngine === 'postgres' ? 'postgres:16-alpine' : 'mongo:7.0';
 
     addLog(`Initiating disaster recovery drill for ${engineName}...`, 'info');
-    if (fileToUpload) {
-      addLog(`Selected dump file: ${fileToUpload.name} (${formatBytes(fileToUpload.size)})`, 'info');
+    if (fileLabel) {
+      addLog(`Executing custom dump file: ${fileLabel}...`, 'info');
+    } else if (type === 'demo') {
+      addLog(`Loading scenario preset: ${sample}...`, 'info');
     }
     addLog(`Creating isolated ephemeral container [${containerImage}]...`, 'info');
 
@@ -236,31 +244,17 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
     }, 700);
 
     try {
-      let response: Response;
+      // Send { engine, content } for custom / uploaded files, or { engine, type: 'demo', sample } for presets
+      const payload =
+        type === 'demo'
+          ? { engine: drillEngine, type: 'demo', sample }
+          : { engine: drillEngine, content: contentToRun ?? uploadedFileContent ?? customContent };
 
-      if (type === 'custom' && fileToUpload) {
-        addLog(`Streaming multipart/form-data payload into API...`, 'info');
-        const formData = new FormData();
-        formData.append('engine', drillEngine);
-        formData.append('type', 'custom');
-        formData.append('file', fileToUpload);
-
-        response = await fetch('/api/drill', {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        const payload =
-          type === 'demo'
-            ? { engine: drillEngine, type: 'demo', sample }
-            : { engine: drillEngine, type: 'custom', content: contentToRun || customContent };
-
-        response = await fetch('/api/drill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
+      const response = await fetch('/api/drill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
       const data: DrillResult = await response.json();
 
@@ -420,27 +414,23 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                   <button
                     disabled={isRunning}
                     onClick={() => {
-                      const sampleText = isPg ? pgSampleHealthy : mongoSampleHealthy;
-                      setCustomContent(sampleText);
                       executeDrill(engine, 'demo', 'healthy');
                     }}
                     className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-emerald-500/5"
                   >
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition" />
-                    <span>Run Healthy Drill (Pass)</span>
+                    <span>Run Preset Healthy</span>
                   </button>
 
                   <button
                     disabled={isRunning}
                     onClick={() => {
-                      const sampleText = isPg ? pgSampleCorrupted : mongoSampleCorrupted;
-                      setCustomContent(sampleText);
                       executeDrill(engine, 'demo', 'corrupted');
                     }}
                     className="flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed group shadow-sm shadow-rose-500/5"
                   >
                     <AlertTriangle className="h-4 w-4 text-rose-400 group-hover:scale-110 transition" />
-                    <span>Run Corrupted Drill (Fail)</span>
+                    <span>Run Preset Corrupted</span>
                   </button>
                 </div>
               </div>
@@ -488,6 +478,7 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                     type="button"
                     onClick={() => {
                       setSelectedFile(null);
+                      setUploadedFileContent('');
                       setCustomContent(isPg ? pgSampleHealthy : mongoSampleHealthy);
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
@@ -525,20 +516,28 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                     </div>
                   </div>
 
-                  {customContent && (
+                  {(uploadedFileContent || customContent) && (
                     <div className="text-[11px] text-zinc-400 flex items-center space-x-2 pt-2 border-t border-zinc-900">
                       <span className="text-zinc-500 font-mono">Payload Preview:</span>
                       <span className="font-mono text-zinc-300 truncate">
-                        {customContent.slice(0, 90).replace(/\n/g, ' ')}...
+                        {(uploadedFileContent || customContent).slice(0, 90).replace(/\n/g, ' ')}...
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Single Prominent Action Button: "Run Drill on Uploaded File" */}
+                {/* Single Prominent Action Button: "Run Drill on [filename]" */}
                 <button
                   disabled={isRunning}
-                  onClick={() => executeDrill(engine, 'custom', undefined, customContent, selectedFile)}
+                  onClick={async () => {
+                    let contentToSend = uploadedFileContent;
+                    if (!contentToSend && selectedFile) {
+                      contentToSend = await selectedFile.text();
+                      setUploadedFileContent(contentToSend);
+                      setCustomContent(contentToSend);
+                    }
+                    executeDrill(engine, 'custom', undefined, contentToSend, selectedFile.name);
+                  }}
                   className={`w-full flex items-center justify-center space-x-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm transition shadow-lg ${
                     isPg
                       ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25 hover:shadow-blue-600/35'
@@ -553,7 +552,7 @@ CORRUPTED_RAW_BLOCK_0xDEADBEEF_SYNTAX_ERROR`;
                   ) : (
                     <>
                       <Play className="h-4 w-4 fill-current" />
-                      <span>Run Drill on Uploaded File</span>
+                      <span>Run Drill on {selectedFile.name}</span>
                     </>
                   )}
                 </button>
